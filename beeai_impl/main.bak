@@ -1,0 +1,194 @@
+from beeai import Bee, BeeHive, Tool
+from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_openai import ChatOpenAI
+import json
+
+# Initialize search tool and LLM
+search = DuckDuckGoSearchRun()
+llm = ChatOpenAI(model="gpt-4", temperature=0)
+
+# Define tools
+class CompanyResearchTool(Tool):
+    name = "company_research"
+    description = "Researches a company and provides comprehensive information"
+
+    def run(self, company_name: str) -> dict:
+        query = f"comprehensive information about {company_name} company, products, services, market"
+        search_results = search.run(query)
+
+        prompt = f"""
+        Based on the following information about {company_name}, extract key details about:
+        1. Products/services
+        2. Target market
+        3. Business model
+        4. Recent news
+        5. Financial performance (if available)
+
+        Information: {search_results}
+
+        Format as a structured JSON dictionary.
+        """
+
+        response = llm.invoke(prompt)
+        # In a real implementation, we would validate this JSON
+        return {"company_name": company_name, "research": response.content}
+
+class CompetitorAnalysisTool(Tool):
+    name = "competitor_analysis"
+    description = "Analyzes competitors for a given company"
+
+    def run(self, company_name: str, company_data: dict) -> dict:
+        query = f"top competitors of {company_name} company market comparison"
+        search_results = search.run(query)
+
+        prompt = f"""
+        Based on the following information and what you know about {company_name}, identify and analyze 3-5 top competitors:
+
+        Company information: {company_data}
+        Search results: {search_results}
+
+        For each competitor provide:
+        1. Name
+        2. Strengths
+        3. Weaknesses
+        4. Market positioning compared to {company_name}
+
+        Format as a structured JSON array of competitors.
+        """
+
+        response = llm.invoke(prompt)
+        return {"competitors": response.content}
+
+class OpportunityIdentificationTool(Tool):
+    name = "identify_opportunities"
+    description = "Identifies market opportunities based on research and competitive analysis"
+
+    def run(self, company_data: dict, competitor_data: dict) -> dict:
+        prompt = f"""
+        Based on the following company information and competitive analysis, identify 3-5 key market opportunities:
+
+        Company information: {company_data}
+        Competitor analysis: {competitor_data}
+
+        For each opportunity provide:
+        1. Title
+        2. Description
+        3. Justification based on the research and competitive analysis
+
+        Format as a structured JSON array of opportunities.
+        """
+
+        response = llm.invoke(prompt)
+        return {"opportunities": response.content}
+
+class ReportGenerationTool(Tool):
+    name = "generate_report"
+    description = "Generates a concise market report"
+
+    def run(self, company_data: dict, competitor_data: dict, opportunities: dict) -> str:
+        prompt = f"""
+        Create a concise 1-page market report based on the following information:
+
+        Company information: {company_data}
+        Competitor analysis: {competitor_data}
+        Market opportunities: {opportunities}
+
+        The report should include:
+        1. Brief company overview
+        2. Summary of competitive landscape
+        3. Key market opportunities
+        4. Strategic recommendations
+
+        Format the report in Markdown.
+        """
+
+        response = llm.invoke(prompt)
+        return response.content
+
+# Define Bees (Agents)
+class ResearcherBee(Bee):
+    name = "Market Researcher"
+    description = "Researches companies and markets to gather comprehensive information"
+    tools = [CompanyResearchTool()]
+
+    def process(self, inputs):
+        company_name = inputs["company_name"]
+        return self.use_tool("company_research", company_name)
+
+class AnalystBee(Bee):
+    name = "Competitive Analyst"
+    description = "Analyzes competitors to identify strengths, weaknesses, and market positioning"
+    tools = [CompetitorAnalysisTool()]
+
+    def process(self, inputs):
+        company_name = inputs["company_name"]
+        company_data = inputs["company_data"]
+        return self.use_tool("competitor_analysis", company_name, company_data)
+
+class StrategistBee(Bee):
+    name = "Market Strategist"
+    description = "Identifies market opportunities based on research and competitive analysis"
+    tools = [OpportunityIdentificationTool()]
+
+    def process(self, inputs):
+        company_data = inputs["company_data"]
+        competitor_data = inputs["competitor_data"]
+        return self.use_tool("identify_opportunities", company_data, competitor_data)
+
+class ReportWriterBee(Bee):
+    name = "Report Writer"
+    description = "Creates concise, actionable market reports"
+    tools = [ReportGenerationTool()]
+
+    def process(self, inputs):
+        company_data = inputs["company_data"]
+        competitor_data = inputs["competitor_data"]
+        opportunities = inputs["opportunities"]
+        return self.use_tool("generate_report", company_data, competitor_data, opportunities)
+
+# Define the BeeHive (workflow)
+class MarketResearchHive(BeeHive):
+    name = "Market Research Workflow"
+    description = "Performs comprehensive market research and generates actionable reports"
+
+    flow = {
+        "researcher": {
+            "bee": ResearcherBee(),
+            "next": "analyst"
+        },
+        "analyst": {
+            "bee": AnalystBee(),
+            "next": "strategist"
+        },
+        "strategist": {
+            "bee": StrategistBee(),
+            "next": "report_writer"
+        },
+        "report_writer": {
+            "bee": ReportWriterBee(),
+            "next": None
+        }
+    }
+
+    input_schema = {
+        "company_name": str
+    }
+
+    def initialize_state(self, inputs):
+        return {
+            "company_name": inputs["company_name"],
+            "company_data": {},
+            "competitor_data": {},
+            "opportunities": {}
+        }
+
+    def process_outputs(self, outputs):
+        # Format the final output
+        return {
+            "market_report": outputs["report_writer"]
+        }
+
+# Run the workflow
+hive = MarketResearchHive()
+result = hive.run({"company_name": "Tesla"})
+print(result["market_report"])

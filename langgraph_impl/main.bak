@@ -1,0 +1,154 @@
+from typing import Dict, TypedDict, Annotated, List
+from langchain.pydantic_v1 import BaseModel, Field
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, END
+from langchain_core.messages import HumanMessage, AIMessage
+import operator
+from langchain_community.tools import DuckDuckGoSearchRun
+
+# State definition
+class AgentState(TypedDict):
+    company_data: Dict
+    competitor_data: Dict
+    opportunities: List[Dict]
+    final_report: str
+    current_step: str
+    messages: List
+
+# Initialize tools
+search = DuckDuckGoSearchRun()
+
+# Define model
+llm = ChatOpenAI(model="gpt-4", temperature=0)
+
+# Research function
+@tool
+def research_company(company_name: str) -> Dict:
+    """Research a company and return key information"""
+    query = f"comprehensive information about {company_name} company, products, services, market"
+    search_results = search.run(query)
+
+    prompt = f"""
+    Based on the following information about {company_name}, extract key details about:
+    1. Products/services
+    2. Target market
+    3. Business model
+    4. Recent news
+    5. Financial performance (if available)
+
+    Information: {search_results}
+
+    Format as a structured JSON dictionary.
+    """
+
+    response = llm.invoke([HumanMessage(content=prompt)])
+    # In a real implementation, we would parse this into proper JSON
+    return {"company_name": company_name, "research": response.content}
+
+# Competitor analysis function
+@tool
+def analyze_competitors(company_name: str, company_data: Dict) -> Dict:
+    """Analyze competitors for a company"""
+    query = f"top competitors of {company_name} company market comparison"
+    search_results = search.run(query)
+
+    prompt = f"""
+    Based on the following information and what you know about {company_name}, identify and analyze 3-5 top competitors:
+
+    Company information: {company_data}
+    Search results: {search_results}
+
+    For each competitor provide:
+    1. Name
+    2. Strengths
+    3. Weaknesses
+    4. Market positioning compared to {company_name}
+
+    Format as a structured JSON array of competitors.
+    """
+
+    response = llm.invoke([HumanMessage(content=prompt)])
+    return {"competitors": response.content}
+
+# Opportunity identification function
+@tool
+def identify_opportunities(company_data: Dict, competitor_data: Dict) -> List[Dict]:
+    """Identify market opportunities based on research and competitive analysis"""
+    prompt = f"""
+    Based on the following company information and competitive analysis, identify 3-5 key market opportunities:
+
+    Company information: {company_data}
+    Competitor analysis: {competitor_data}
+
+    For each opportunity provide:
+    1. Title
+    2. Description
+    3. Justification based on the research and competitive analysis
+
+    Format as a structured JSON array of opportunities.
+    """
+
+    response = llm.invoke([HumanMessage(content=prompt)])
+    return {"opportunities": response.content}
+
+# Report generation function
+@tool
+def generate_report(company_data: Dict, competitor_data: Dict, opportunities: List[Dict]) -> str:
+    """Generate a concise market report"""
+    prompt = f"""
+    Create a concise 1-page market report based on the following information:
+
+    Company information: {company_data}
+    Competitor analysis: {competitor_data}
+    Market opportunities: {opportunities}
+
+    The report should include:
+    1. Brief company overview
+    2. Summary of competitive landscape
+    3. Key market opportunities
+    4. Strategic recommendations
+
+    Format the report in Markdown.
+    """
+
+    response = llm.invoke([HumanMessage(content=prompt)])
+    return response.content
+
+# Define the state graph
+def build_market_research_graph():
+    workflow = StateGraph(AgentState)
+
+    # Define nodes for each step
+    workflow.add_node("research", lambda state: {"company_data": research_company(state["company_name"]), "current_step": "research_complete"})
+    workflow.add_node("competitors", lambda state: {"competitor_data": analyze_competitors(state["company_name"], state["company_data"]), "current_step": "competitors_complete"})
+    workflow.add_node("opportunities", lambda state: {"opportunities": identify_opportunities(state["company_data"], state["competitor_data"]), "current_step": "opportunities_complete"})
+    workflow.add_node("report", lambda state: {"final_report": generate_report(state["company_data"], state["competitor_data"], state["opportunities"]), "current_step": "report_complete"})
+
+    # Define edges
+    workflow.add_edge("research", "competitors")
+    workflow.add_edge("competitors", "opportunities")
+    workflow.add_edge("opportunities", "report")
+    workflow.add_edge("report", END)
+
+    # Set entry point
+    workflow.set_entry_point("research")
+
+    return workflow
+
+# Initialize and run the graph
+graph = build_market_research_graph()
+app = graph.compile()
+
+# Run the workflow
+result = app.invoke({
+    "company_name": "Tesla",
+    "company_data": {},
+    "competitor_data": {},
+    "opportunities": [],
+    "final_report": "",
+    "current_step": "start",
+    "messages": []
+})
+
+print(result["final_report"])

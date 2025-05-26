@@ -1,0 +1,82 @@
+from crewai import Agent, Task, Crew, Process
+# from langchain.tools import DuckDuckGoSearchRun
+from langchain_community.tools import DuckDuckGoSearchRun
+
+
+# Initialize search tool
+search_tool = DuckDuckGoSearchRun()
+
+# Define agents with specific roles
+researcher = Agent(
+    role="Market Researcher",
+    goal="Find comprehensive information about the target company and its market",
+    backstory="You're an expert market researcher with 15 years of experience analyzing companies across various industries.",
+    verbose=True,
+    tools=[search_tool],
+    allow_delegation=True
+)
+
+analyst = Agent(
+    role="Competitive Analyst",
+    goal="Analyze the competitive landscape and identify key differentiators",
+    backstory="You specialize in competitive analysis with a deep understanding of market positioning and competitive advantages.",
+    verbose=True,
+    tools=[search_tool],
+    allow_delegation=True
+)
+
+strategist = Agent(
+    role="Market Strategist",
+    goal="Identify market opportunities based on research and analysis",
+    backstory="You're a veteran strategist who can spot market opportunities others miss.",
+    verbose=True,
+    allow_delegation=True
+)
+
+report_writer = Agent(
+    role="Report Writer",
+    goal="Create concise, actionable market reports",
+    backstory="You excel at distilling complex information into clear, compelling reports for business decision-makers.",
+    verbose=True,
+    allow_delegation=True
+)
+
+# Define tasks
+research_task = Task(
+    description="Research {company_name} thoroughly. Identify their products/services, target market, business model, recent news, and financial performance if available.",
+    expected_output="Comprehensive research document on the company",
+    agent=researcher
+)
+
+competitor_task = Task(
+    description="Analyze the top 3-5 competitors of {company_name}. Identify their strengths, weaknesses, and market positioning compared to {company_name}.",
+    expected_output="Competitive analysis document",
+    agent=analyst,
+    context=[research_task]
+)
+
+opportunity_task = Task(
+    description="Based on the research and competitive analysis, identify 3-5 key market opportunities for {company_name}.",
+    expected_output="List of market opportunities with justification",
+    agent=strategist,
+    context=[research_task, competitor_task]
+)
+
+report_task = Task(
+    description="Create a concise 1-page market report for {company_name} that summarizes the research, competitive analysis, and highlights the market opportunities.",
+    expected_output="1-page market report in markdown format",
+    agent=report_writer,
+    context=[research_task, competitor_task, opportunity_task]
+)
+
+# Create crew
+market_research_crew = Crew(
+    agents=[researcher, analyst, strategist, report_writer],
+    tasks=[research_task, competitor_task, opportunity_task, report_task],
+    verbose=2,
+    process=Process.sequential
+)
+
+# Execute the crew
+result = market_research_crew.kickoff(inputs={"company_name": "Tesla"})
+print(result)

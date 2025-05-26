@@ -1,0 +1,15 @@
+[project]
+name = "langgraph-impl"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11.8"
+dependencies = [
+    "duckduckgo-search>=8.0.2",
+    "langchain-community>=0.3.24",
+    "langchain-core>=0.3.61",
+    "langchain-openai>=0.3.18",
+    "langchain[anthropic]>=0.3.25",
+    "langgraph[anthropic]>=0.4.7",
+    "typing>=3.10.0.0",
+]

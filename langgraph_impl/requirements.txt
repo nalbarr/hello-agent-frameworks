@@ -1,0 +1,8 @@
+typing
+langchain-core
+langchain-openai
+langchain-community
+langchain[anthropic]
+langgraph
+duckduckgo-search
+

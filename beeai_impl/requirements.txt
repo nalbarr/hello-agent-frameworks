@@ -1,0 +1,3 @@
+asyncio
+beeai-framework
+beeai-framework[wikipedia]
