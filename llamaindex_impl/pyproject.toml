@@ -1,0 +1,11 @@
+[project]
+name = "llamaindex-impl"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11.8"
+dependencies = [
+    "dotenv>=0.9.9",
+    "llama-index>=0.12.37",
+    "llama-index-tools-tavily-research>=0.3.0",
+]
